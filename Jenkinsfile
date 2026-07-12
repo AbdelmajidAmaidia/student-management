@@ -52,8 +52,31 @@ pipeline {
             steps {
                 archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
             }
+        } 
+        stage('Build Docker Image') {
+           steps {
+               sh 'docker build -t student-management .'
+            }
         }
-
+        stage('Tag Docker Image') {
+           steps {
+              sh 'docker tag student-management amaidiaabdelmajiddo/student-management:latest'
+           }
+        }
+      stage('Push Docker Image') {
+           steps {
+                withCredentials([usernamePassword(
+       n           credentialsId: 'dockerhub',
+                   usernameVariable: 'DOCKER_USER',
+                   passwordVariable: 'DOCKER_PASS'
+             )]) {
+            sh '''
+                echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                docker push amaidiaabdelmajiddo/student-management:latest
+            '''
+        }
+    }
+}
     }
 
     post {
