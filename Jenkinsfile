@@ -85,6 +85,12 @@ pipeline {
             }
         }
 
+        stage('Deploy Kubernetes') {
+            steps {
+                sh './scripts/deploy.sh'
+            }
+        }
+
     }
 
     post {
@@ -95,6 +101,15 @@ pipeline {
 
         failure {
             echo 'Pipeline FAILED'
+
+            sh '''
+                if kubectl get deployment student-management >/dev/null 2>&1; then
+                    echo "Rollback to previous version..."
+                    kubectl rollout undo deployment/student-management
+                else
+                    echo "Deployment not found. Rollback skipped."
+                fi
+            '''
         }
 
     }
