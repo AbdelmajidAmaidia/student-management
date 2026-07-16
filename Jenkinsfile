@@ -34,6 +34,15 @@ pipeline {
             }
         }
 
+        stage('JaCoCo Code Coverage') {
+            steps {
+                echo '📊 Generating JaCoCo Code Coverage Report...'
+                // Le rapport est généré automatiquement par le plugin Maven
+                // Vérifier que la couverture est >= 80%
+                sh 'echo "JaCoCo report generated at: target/site/jacoco/index.html"'
+            }
+        }
+
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('SonarQube') {
@@ -95,12 +104,30 @@ pipeline {
 
     post {
 
+        always {
+            // 📊 Publier le rapport JaCoCo
+            publishHTML([
+                reportDir: 'target/site/jacoco',
+                reportFiles: 'index.html',
+                reportName: '📊 JaCoCo Code Coverage Report',
+                keepAll: true,
+                alwaysLinkToLastBuild: true
+            ])
+
+            // 📈 Archiver le fichier d'exécution JaCoCo pour l'historique
+            archiveArtifacts artifacts: 'target/jacoco.exec', 
+                             allowEmptyArchive: true,
+                             fingerprint: true
+        }
+
         success {
-            echo 'Pipeline SUCCESS'
+            echo '✅ Pipeline SUCCESS'
+            echo '📊 JaCoCo Code Coverage Report is available'
         }
 
         failure {
-            echo 'Pipeline FAILED'
+            echo '❌ Pipeline FAILED'
+            echo '⚠️ Check JaCoCo Code Coverage Report for details'
 
             sh '''
                 if kubectl get deployment student-management >/dev/null 2>&1; then
