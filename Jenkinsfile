@@ -106,7 +106,8 @@ pipeline {
 
         always {
             // 📊 Publier le rapport JaCoCo
-            publishHTML([
+            publishHTML(target: [
+                allowMissing: true,
                 reportDir: 'target/site/jacoco',
                 reportFiles: 'index.html',
                 reportName: '📊 JaCoCo Code Coverage Report',
@@ -115,7 +116,7 @@ pipeline {
             ])
 
             // 📈 Archiver le fichier d'exécution JaCoCo pour l'historique
-            archiveArtifacts artifacts: 'target/jacoco.exec', 
+            archiveArtifacts artifacts: 'target/jacoco.exec',
                              allowEmptyArchive: true,
                              fingerprint: true
         }
