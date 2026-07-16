@@ -1,13 +1,67 @@
 package com.example.student.controller;
 
+import com.example.student.dto.student.StudentRequest;
+import com.example.student.dto.student.StudentResponse;
+import com.example.student.service.StudentService;
+import jakarta.validation.Valid;
+import java.security.Principal;
+import java.util.List;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@RequestMapping("/api/students")
 public class StudentController {
 
-    @GetMapping("/")
-    public String home() {
-        return "Student Management is running!";
+    private final StudentService studentService;
+
+    public StudentController(StudentService studentService) {
+        this.studentService = studentService;
+    }
+
+    @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<StudentResponse> create(@Valid @RequestBody StudentRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(studentService.create(request));
+    }
+
+    @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
+    public ResponseEntity<StudentResponse> getById(@PathVariable Long id) {
+        return ResponseEntity.ok(studentService.getById(id));
+    }
+
+    @GetMapping("/me")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<StudentResponse> getMyProfile(Principal principal) {
+        return ResponseEntity.ok(studentService.getCurrentStudent(principal.getName()));
+    }
+
+    @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
+    public ResponseEntity<List<StudentResponse>> getAll() {
+        return ResponseEntity.ok(studentService.getAll());
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<StudentResponse> update(@PathVariable Long id, @Valid @RequestBody StudentRequest request) {
+        return ResponseEntity.ok(studentService.update(id, request));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        studentService.delete(id);
+        return ResponseEntity.noContent().build();
     }
 }

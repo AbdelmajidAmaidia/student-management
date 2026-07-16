@@ -1,33 +1,14 @@
 package com.example.student.service;
 
-
-import org.springframework.stereotype.Service;
-import com.example.student.model.Student;
-
-
-import java.util.ArrayList;
+import com.example.student.dto.student.StudentRequest;
+import com.example.student.dto.student.StudentResponse;
 import java.util.List;
 
-
-@Service
-public class StudentService {
-
-
-    public List<Student> getStudents(){
-
-        List<Student> students=new ArrayList<>();
-
-        students.add(
-            new Student(1L,"Ahmed")
-        );
-
-        students.add(
-            new Student(2L,"Ali")
-        );
-
-
-        return students;
-
-    }
-
+public interface StudentService {
+    StudentResponse create(StudentRequest request);
+    StudentResponse getById(Long id);
+    StudentResponse getCurrentStudent(String username);
+    List<StudentResponse> getAll();
+    StudentResponse update(Long id, StudentRequest request);
+    void delete(Long id);
 }
