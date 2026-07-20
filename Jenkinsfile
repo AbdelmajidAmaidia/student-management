@@ -106,14 +106,14 @@ pipeline {
 
         always {
             // 📊 Publier le rapport JaCoCo
-            publishHTML([
-                reportDir: 'target/site/jacoco',
-                reportFiles: 'index.html',
-                reportName: '📊 JaCoCo Code Coverage Report',
-                keepAll: true,
-                alwaysLinkToLastBuild: true
-            ])
-
+      publishHTML(target: [
+    allowMissing: true,
+    alwaysLinkToLastBuild: true,
+    keepAll: true,
+    reportDir: 'target/site/jacoco',
+    reportFiles: 'index.html',
+    reportName: 'JaCoCo Report'
+])
             // 📈 Archiver le fichier d'exécution JaCoCo pour l'historique
             archiveArtifacts artifacts: 'target/jacoco.exec', 
                              allowEmptyArchive: true,
