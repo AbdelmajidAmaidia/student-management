@@ -1,6 +1,6 @@
 pipeline {
 
-    agent { label 'docker-k8s' } // agent avec Maven, Docker et kubectl installés
+    agent any
 
     tools {
         maven 'Maven3'
