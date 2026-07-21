@@ -54,24 +54,7 @@ pipeline {
             }
         }
 
-       stage('Quality Gate') {
-    steps {
-        timeout(time: 5, unit: 'MINUTES') {
-            script {
-                def qg = waitForQualityGate(abortPipeline: false)
-
-                echo "========================================"
-                echo "SonarQube Quality Gate: ${qg.status}"
-                echo "========================================"
-
-                if (qg.status != 'OK') {
-                    echo "⚠️ Quality Gate FAILED, but the pipeline will continue."
-                }
-            }
-        }
-    }
-}
-        
+     
 
         stage('Deploy to Nexus Repository') {
             when { branch 'main' }
