@@ -70,7 +70,7 @@ pipeline {
         }
 
         stage('Build Docker Image') {
-            when { branch 'main' }
+            
             steps {
                 sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
                 sh "docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest"
@@ -78,7 +78,7 @@ pipeline {
         }
 
         stage('Push Docker Image') {
-            when { branch 'main' }
+            
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub',
@@ -96,7 +96,7 @@ pipeline {
         }
 
         stage('Deploy to Kubernetes') {
-            when { branch 'main' }
+           
             steps {
                 input message: "Déployer la version ${IMAGE_TAG} en production ?", ok: 'Déployer'
                 withKubeConfig([credentialsId: 'kubeconfig-prod']) {
