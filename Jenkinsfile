@@ -1,10 +1,22 @@
 pipeline {
 
-    agent any
+    agent { label 'docker-k8s' } // agent avec Maven, Docker et kubectl installés
 
     tools {
         maven 'Maven3'
         jdk 'JDK17'
+    }
+
+    environment {
+        IMAGE_NAME = 'amaidiaabdelmajiddo/student-management'
+        IMAGE_TAG  = "${env.BUILD_NUMBER}"
+    }
+
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+        timestamps()
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '15'))
     }
 
     stages {
@@ -16,29 +28,22 @@ pipeline {
             }
         }
 
-       stage('Build') {
-    steps {
-        sh 'mvn clean compile'
-    }
-}
-        stage('Unit Tests') {
+        stage('Build & Test') {
             steps {
-                sh 'mvn test'
+                // clean + compile + test + package en un seul cycle de vie Maven
+                sh 'mvn clean verify'
             }
-        }
-
-        stage('Test Report') {
-            steps {
-                junit 'target/surefire-reports/*.xml'
+            post {
+                always {
+                    junit 'target/surefire-reports/*.xml'
+                }
             }
         }
 
         stage('JaCoCo Code Coverage') {
             steps {
-                echo '📊 Generating JaCoCo Code Coverage Report...'
-                // Le rapport est généré automatiquement par le plugin Maven
-                // Vérifier que la couverture est >= 80%
-                sh 'echo "JaCoCo report generated at: target/site/jacoco/index.html"'
+                // Échoue le build si la couverture définie dans le pom.xml (jacoco:check) n'est pas atteinte
+                sh 'mvn jacoco:check'
             }
         }
 
@@ -50,9 +55,18 @@ pipeline {
             }
         }
 
-        stage('Package') {
+        stage('Quality Gate') {
             steps {
-                sh 'mvn package'
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        stage('Deploy to Nexus Repository') {
+            when { branch 'main' }
+            steps {
+                sh 'mvn deploy -DskipTests'
             }
         }
 
@@ -63,82 +77,81 @@ pipeline {
         }
 
         stage('Build Docker Image') {
+            when { branch 'main' }
             steps {
-                sh 'docker build -t student-management .'
-            }
-        }
-
-        stage('Tag Docker Image') {
-            steps {
-                sh 'docker tag student-management amaidiaabdelmajiddo/student-management:latest'
+                sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+                sh "docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest"
             }
         }
 
         stage('Push Docker Image') {
+            when { branch 'main' }
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub',
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
-
                     sh '''
                         echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-
-                        docker push amaidiaabdelmajiddo/student-management:latest
-
+                        docker push ${IMAGE_NAME}:${IMAGE_TAG}
+                        docker push ${IMAGE_NAME}:latest
                         docker logout
                     '''
                 }
             }
         }
 
-        stage('Deploy Kubernetes') {
+        stage('Deploy to Kubernetes') {
+            when { branch 'main' }
             steps {
-                sh './scripts/deploy.sh'
+                input message: "Déployer la version ${IMAGE_TAG} en production ?", ok: 'Déployer'
+                withKubeConfig([credentialsId: 'kubeconfig-prod']) {
+                    sh "./scripts/deploy.sh ${IMAGE_TAG}"
+                }
             }
         }
-
     }
 
     post {
 
         always {
-            // 📊 Publier le rapport JaCoCo
-       publishHTML(target: [
-    allowMissing: true,
-    alwaysLinkToLastBuild: true,
-    keepAll: true,
-    reportDir: 'target/site/jacoco',
-    reportFiles: 'index.html',
-    reportName: 'JaCoCo Report'
-])
+            publishHTML(target: [
+                allowMissing: true,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: 'target/site/jacoco',
+                reportFiles: 'index.html',
+                reportName: 'JaCoCo Report'
+            ])
 
-            // 📈 Archiver le fichier d'exécution JaCoCo pour l'historique
-            archiveArtifacts artifacts: 'target/jacoco.exec', 
-                             allowEmptyArchive: true,
-                             fingerprint: true
+            archiveArtifacts artifacts: 'target/jacoco.exec',
+                              allowEmptyArchive: true,
+                              fingerprint: true
+
+            cleanWs()
         }
 
         success {
-            echo '✅ Pipeline SUCCESS'
-            echo '📊 JaCoCo Code Coverage Report is available'
+            echo "✅ Pipeline SUCCESS — version ${IMAGE_TAG}"
         }
 
         failure {
             echo '❌ Pipeline FAILED'
-            echo '⚠️ Check JaCoCo Code Coverage Report for details'
-
-            sh '''
-                if kubectl get deployment student-management >/dev/null 2>&1; then
-                    echo "Rollback to previous version..."
-                    kubectl rollout undo deployment/student-management
-                else
-                    echo "Deployment not found. Rollback skipped."
-                fi
-            '''
+            script {
+                if (env.BRANCH_NAME == 'main') {
+                    withKubeConfig([credentialsId: 'kubeconfig-prod']) {
+                        sh '''
+                            if kubectl get deployment student-management >/dev/null 2>&1; then
+                                echo "Rollback vers la version précédente..."
+                                kubectl rollout undo deployment/student-management
+                            else
+                                echo "Déploiement introuvable. Rollback ignoré."
+                            fi
+                        '''
+                    }
+                }
+            }
         }
-
     }
-
-}
+}       
