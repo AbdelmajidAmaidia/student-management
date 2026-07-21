@@ -57,7 +57,7 @@ pipeline {
      
 
         stage('Deploy to Nexus Repository') {
-            when { branch 'main' }
+          
             steps {
                 sh 'mvn deploy -DskipTests'
             }
