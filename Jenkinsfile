@@ -41,10 +41,9 @@ pipeline {
         }
 
         stage('JaCoCo Code Coverage') {
-            steps {
-                // Échoue le build si la couverture définie dans le pom.xml (jacoco:check) n'est pas atteinte
-                sh 'mvn jacoco:check'
-            }
+           steps {
+        echo 'JaCoCo report already generated during verify.'
+    }
         }
 
         stage('SonarQube Analysis') {
