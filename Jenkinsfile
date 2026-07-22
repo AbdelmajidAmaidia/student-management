@@ -45,14 +45,27 @@ pipeline {
         echo 'JaCoCo report already generated during verify.'
     }
         }
+stage('SonarQube') {
+    steps {
+        script {
+            if (env.CHANGE_ID) {
+                echo "Pull Request détectée"
+                echo "Exécution des tests uniquement"
 
-        stage('SonarQube Analysis') {
-            steps {
+                sh "mvn clean test"
+
+            } else if (env.BRANCH_NAME == "main") {
+
+                echo "Merge effectué - Analyse complète"
+
                 withSonarQubeEnv('SonarQube') {
-                    sh 'mvn sonar:sonar'
+                    sh "mvn clean verify sonar:sonar"
                 }
+
             }
         }
+    }
+}
 
      
 
