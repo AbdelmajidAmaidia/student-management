@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+
+metadata:
+  name: student-config
+
+data:
+  SERVER_PORT: "8080"
+  SPRING_DATASOURCE_URL: "jdbc:mysql://mysql:3306/student_management?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
+  SPRING_DATASOURCE_DRIVER: "com.mysql.cj.jdbc.Driver"
+  SPRING_JPA_HIBERNATE_DDL_AUTO: "update"
+  SPRING_JPA_SHOW_SQL: "false"
+  APP_JWT_EXPIRATION_MS: "3600000"
+  APP_JWT_REFRESH_EXPIRATION_MS: "604800000"

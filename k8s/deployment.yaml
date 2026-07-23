@@ -28,9 +28,11 @@ spec:
 
         # Toujours récupérer la dernière version depuis Docker Hub
         imagePullPolicy: Always
-
-        ports:
+         ports:
         - containerPort: 8080
+        envFrom:
+        - configMapRef:
+            name: student-config
 
         resources:
           requests:
