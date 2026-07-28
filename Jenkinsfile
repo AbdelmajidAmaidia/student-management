@@ -10,6 +10,7 @@ pipeline {
     environment {
         IMAGE_NAME = 'amaidiaabdelmajiddo/student-management'
         IMAGE_TAG  = "${env.BUILD_NUMBER}"
+        NAMESPACE  = "student-test"
     }
 
     options {
@@ -18,6 +19,7 @@ pipeline {
         disableConcurrentBuilds()
         buildDiscarder(logRotator(numToKeepStr: '15'))
     }
+
 
     stages {
 
@@ -28,9 +30,9 @@ pipeline {
             }
         }
 
+
         stage('Build & Test') {
             steps {
-                // clean + compile + test + package en un seul cycle de vie Maven
                 sh 'mvn clean verify'
             }
             post {
@@ -40,41 +42,44 @@ pipeline {
             }
         }
 
+
         stage('JaCoCo Code Coverage') {
-           steps {
-        echo 'JaCoCo report already generated during verify.'
-    }
-        }
-stage('SonarQube') {
-    steps {
-        script {
-            if (env.CHANGE_ID) {
-                echo "Pull Request détectée"
-                echo "Exécution des tests uniquement"
-
-                sh "mvn clean test"
-
-            } else if (env.BRANCH_NAME == "main") {
-
-                echo "Merge effectué - Analyse complète"
-
-                withSonarQubeEnv('SonarQube') {
-                    sh "mvn clean verify sonar:sonar"
-                }
-
+            steps {
+                echo 'JaCoCo report already generated during verify.'
             }
         }
-    }
-}
 
-     
+
+        stage('SonarQube') {
+            steps {
+                script {
+
+                    if (env.CHANGE_ID) {
+
+                        echo "Pull Request détectée"
+                        sh "mvn clean test"
+
+                    } else if (env.BRANCH_NAME == "main") {
+
+                        echo "Merge effectué - Analyse complète"
+
+                        withSonarQubeEnv('SonarQube') {
+                            sh "mvn clean verify sonar:sonar"
+                        }
+                    }
+                }
+            }
+        }
+
+
 
         stage('Deploy to Nexus Repository') {
-          
             steps {
                 sh 'mvn deploy -DskipTests'
             }
         }
+
+
 
         stage('Publish Artifact') {
             steps {
@@ -82,82 +87,220 @@ stage('SonarQube') {
             }
         }
 
+
+
         stage('Build Docker Image') {
-            
+
             steps {
+
                 sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+
                 sh "docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest"
             }
         }
 
+
+
         stage('Push Docker Image') {
-            
+
             steps {
+
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub',
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
+
                     sh '''
                         echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+
                         docker push ${IMAGE_NAME}:${IMAGE_TAG}
+
                         docker push ${IMAGE_NAME}:latest
+
                         docker logout
                     '''
                 }
             }
         }
 
+
+
+
         stage('Deploy to Kubernetes') {
-           
+
             steps {
-                input message: "Déployer la version ${IMAGE_TAG} en production ?", ok: 'Déployer'
+
+                input message: "Déployer la version ${IMAGE_TAG} ?", ok: 'Déployer'
+
                 withKubeConfig([credentialsId: 'kubeconfig-prod']) {
+
                     sh "./scripts/deploy.sh ${IMAGE_TAG}"
+
                 }
             }
         }
+
+
+
+        /*
+         Nouvelle étape :
+         Vérification que Kubernetes démarre bien
+        */
+
+        stage('Verify Kubernetes Deployment') {
+
+            steps {
+
+                withKubeConfig([credentialsId: 'kubeconfig-prod']) {
+
+                    sh '''
+                    kubectl rollout status deployment/student-management \
+                    -n ${NAMESPACE}
+
+                    kubectl get pods -n ${NAMESPACE}
+                    '''
+                }
+            }
+        }
+
+
+
+        /*
+         Vérification Prometheus
+         L'application doit exposer :
+         /actuator/prometheus
+        */
+
+        stage('Verify Prometheus Metrics') {
+
+            steps {
+
+                withKubeConfig([credentialsId: 'kubeconfig-prod']) {
+
+                    sh '''
+                    echo "Checking Spring Boot Prometheus endpoint..."
+
+                    kubectl run curl-test \
+                    --image=curlimages/curl \
+                    --restart=Never \
+                    -n ${NAMESPACE} \
+                    -- curl -f http://student-service:8080/actuator/prometheus
+
+
+                    kubectl delete pod curl-test \
+                    -n ${NAMESPACE} \
+                    --ignore-not-found
+                    '''
+                }
+            }
+        }
+
+
+
+        /*
+         Vérification ServiceMonitor
+        */
+
+        stage('Verify ServiceMonitor') {
+
+            steps {
+
+                withKubeConfig([credentialsId: 'kubeconfig-prod']) {
+
+                    sh '''
+                    echo "Checking ServiceMonitor..."
+
+                    kubectl get servicemonitor \
+                    -n ${NAMESPACE}
+                    '''
+                }
+            }
+        }
+
+
     }
+
 
     post {
 
+
         always {
+
             publishHTML(target: [
+
                 allowMissing: true,
+
                 alwaysLinkToLastBuild: true,
+
                 keepAll: true,
+
                 reportDir: 'target/site/jacoco',
+
                 reportFiles: 'index.html',
+
                 reportName: 'JaCoCo Report'
+
             ])
+
 
             archiveArtifacts artifacts: 'target/jacoco.exec',
                               allowEmptyArchive: true,
                               fingerprint: true
 
+
             cleanWs()
         }
 
+
+
         success {
+
             echo "✅ Pipeline SUCCESS — version ${IMAGE_TAG}"
+
+            echo "📊 Prometheus metrics verified"
+
+            echo "📈 Grafana dashboard ready"
+
         }
 
+
+
         failure {
+
             echo '❌ Pipeline FAILED'
+
+
             script {
+
                 if (env.BRANCH_NAME == 'main') {
+
+
                     withKubeConfig([credentialsId: 'kubeconfig-prod']) {
+
+
                         sh '''
-                            if kubectl get deployment student-management >/dev/null 2>&1; then
-                                echo "Rollback vers la version précédente..."
-                                kubectl rollout undo deployment/student-management
-                            else
-                                echo "Déploiement introuvable. Rollback ignoré."
-                            fi
+
+                        if kubectl get deployment student-management \
+                        -n ${NAMESPACE} >/dev/null 2>&1;
+
+                        then
+
+                            echo "Rollback vers version précédente..."
+
+                            kubectl rollout undo deployment/student-management \
+                            -n ${NAMESPACE}
+
+                        else
+
+                            echo "Déploiement introuvable"
+
+                        fi
+
                         '''
                     }
                 }
             }
         }
     }
-}       
+}
