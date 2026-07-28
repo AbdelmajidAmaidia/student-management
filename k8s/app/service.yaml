@@ -4,14 +4,16 @@ kind: Service
 metadata:
   name: student-service
   namespace: student-test
+  labels:
+    app: student-management
 
 spec:
-
   selector:
     app: student-management
 
   ports:
-  - port: 8080
-    targetPort: 8080
+    - name: http
+      port: 8080
+      targetPort: 8080
 
   type: NodePort

@@ -4,8 +4,6 @@ kind: Deployment
 metadata:
   name: student-management
   namespace: student-test
-  labels:
-    app: student-management
 
 spec:
   replicas: 2
@@ -23,22 +21,26 @@ spec:
       containers:
       - name: student-management
 
-        # Image créée et envoyée par Jenkins vers Docker Hub
-        image: amaidiaabdelmajiddo/student-management:latest
+        image: amaidiaabdelmajiddo/student-management:2026-07-28
 
-        # Toujours récupérer la dernière version depuis Docker Hub
         imagePullPolicy: Always
-         ports:
+
+        ports:
         - containerPort: 8080
+
         envFrom:
         - configMapRef:
             name: student-config
 
-        resources:
-          requests:
-            cpu: "250m"
-            memory: "512Mi"
+        env:
+        - name: SPRING_DATASOURCE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MYSQL_USER
 
-          limits:
-            cpu: "500m"
-            memory: "1Gi"
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MYSQL_PASSWORD

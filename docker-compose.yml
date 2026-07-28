@@ -1,0 +1,36 @@
+version: "3.8"
+
+services:
+
+  mysql:
+    image: mysql:8
+    container_name: mysql
+    environment:
+      MYSQL_DATABASE: student_management
+      MYSQL_ROOT_PASSWORD: admin
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+
+  student-management:
+    image: amaidiaabdelmajiddo/student-management:latest
+    container_name: student-management
+    depends_on:
+      - mysql
+    ports:
+      - "8083:8082"
+    environment:
+
+      SERVER_PORT: 8082
+
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/student_management?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+
+      SPRING_DATASOURCE_USERNAME: root
+
+      SPRING_DATASOURCE_PASSWORD: admin
+
+
+volumes:
+  mysql-data:
