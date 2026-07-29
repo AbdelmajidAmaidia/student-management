@@ -1,0 +1,270 @@
+pipeline {
+
+    agent any
+
+    tools {
+
+        maven 'Maven3'
+        jdk 'JDK17'
+
+    }
+
+
+    environment {
+
+        IMAGE_NAME = 'amaidiaabdelmajiddo/student-management'
+        IMAGE_TAG  = "${env.BUILD_NUMBER}"
+
+    }
+
+
+    options {
+
+        timeout(time: 30, unit: 'MINUTES')
+
+        timestamps()
+
+        disableConcurrentBuilds()
+
+        buildDiscarder(logRotator(numToKeepStr: '15'))
+
+    }
+
+
+
+    stages {
+
+
+        stage('Checkout Application') {
+
+            steps {
+
+                git branch: 'main',
+                    credentialsId: 'github-token',
+                    url: 'https://github.com/AbdelmajidAmaidia/student-management.git'
+
+            }
+
+        }
+
+
+
+        stage('Build & Test') {
+
+            steps {
+
+                sh 'mvn clean verify'
+
+            }
+
+
+            post {
+
+                always {
+
+                    junit 'target/surefire-reports/*.xml'
+
+                }
+
+            }
+
+        }
+
+
+
+        stage('SonarQube Analysis') {
+
+            steps {
+
+                withSonarQubeEnv('SonarQube') {
+
+                    sh '''
+                    mvn sonar:sonar
+                    '''
+
+                }
+
+            }
+
+        }
+
+
+
+
+        stage('Deploy Artifact Nexus') {
+
+            steps {
+
+                sh '''
+                mvn deploy -DskipTests
+                '''
+
+            }
+
+        }
+
+
+
+
+        stage('Build Docker Image') {
+
+            steps {
+
+                sh """
+
+                docker build \
+                -t ${IMAGE_NAME}:${IMAGE_TAG} .
+
+
+                docker tag \
+                ${IMAGE_NAME}:${IMAGE_TAG} \
+                ${IMAGE_NAME}:latest
+
+                """
+
+            }
+
+        }
+
+
+
+
+        stage('Push Docker Image') {
+
+
+            steps {
+
+
+                withCredentials([usernamePassword(
+
+                    credentialsId: 'dockerhub',
+
+                    usernameVariable: 'DOCKER_USER',
+
+                    passwordVariable: 'DOCKER_PASS'
+
+
+                )]) {
+
+
+                    sh '''
+
+                    echo "$DOCKER_PASS" | docker login \
+                    -u "$DOCKER_USER" \
+                    --password-stdin
+
+
+
+                    docker push ${IMAGE_NAME}:${IMAGE_TAG}
+
+
+                    docker push ${IMAGE_NAME}:latest
+
+
+
+                    docker logout
+
+                    '''
+
+                }
+
+            }
+
+        }
+
+
+
+        /*
+         Déclenche le pipeline CD
+        */
+
+        stage('Trigger CD Pipeline') {
+
+
+            steps {
+
+
+                build job: 'student-management-CD',
+
+                parameters: [
+
+                    string(
+                        name: 'IMAGE_TAG',
+                        value: "${IMAGE_TAG}"
+                    )
+
+                ]
+
+
+            }
+
+        }
+
+
+
+    }
+
+
+
+    post {
+
+
+        success {
+
+
+            echo """
+
+            ✅ CI SUCCESS
+
+            Image créée :
+
+            ${IMAGE_NAME}:${IMAGE_TAG}
+
+
+            CD Pipeline déclenché
+
+            """
+
+        }
+
+
+
+        failure {
+
+
+            echo """
+
+            ❌ CI FAILED
+
+            Aucun déploiement effectué
+
+            """
+
+        }
+
+
+
+        always {
+
+
+            archiveArtifacts(
+
+                artifacts: 'target/*.jar',
+
+                allowEmptyArchive: true,
+
+                fingerprint: true
+
+            )
+
+
+            cleanWs()
+
+
+        }
+
+
+    }
+
+
+}

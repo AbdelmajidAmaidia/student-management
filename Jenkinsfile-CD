@@ -1,0 +1,261 @@
+pipeline {
+
+
+    agent any
+
+
+    parameters {
+
+
+        string(
+
+            name: 'IMAGE_TAG',
+
+            defaultValue: 'latest',
+
+            description: 'Docker image version from CI'
+
+        )
+
+
+    }
+
+
+
+
+    environment {
+
+
+        IMAGE_NAME = 'amaidiaabdelmajiddo/student-management'
+
+
+    }
+
+
+
+
+    options {
+
+
+        timeout(time:15, unit:'MINUTES')
+
+        timestamps()
+
+        disableConcurrentBuilds()
+
+
+    }
+
+
+
+
+
+    stages {
+
+
+
+        stage('Checkout Repository') {
+
+
+            steps {
+
+
+                git branch: 'main',
+
+                    credentialsId: 'github-token',
+
+                    url: 'https://github.com/AbdelmajidAmaidia/student-management.git'
+
+
+            }
+
+        }
+
+
+
+
+
+
+        stage('Update Kubernetes Manifest') {
+
+
+
+            steps {
+
+
+                sh """
+
+
+                echo "Image avant modification"
+
+                grep image k8s/deployment.yaml
+
+
+
+                sed -i \
+                's#image:.*#image: ${IMAGE_NAME}:${IMAGE_TAG}#' \
+                k8s/deployment.yaml
+
+
+
+                echo "Image après modification"
+
+                grep image k8s/deployment.yaml
+
+
+
+                """
+
+            }
+
+        }
+
+
+
+
+
+
+
+        stage('Commit Kubernetes Change') {
+
+
+
+            steps {
+
+
+
+                sh """
+
+
+                git config user.name "Jenkins"
+
+
+                git config user.email "jenkins@company.com"
+
+
+
+                git add k8s/deployment.yaml
+
+
+
+                git commit \
+                -m "Deploy image ${IMAGE_TAG}" || true
+
+
+
+                """
+
+            }
+
+
+        }
+
+
+
+
+
+
+
+        stage('Push Git Changes') {
+
+
+
+            steps {
+
+
+
+                withCredentials([gitUsernamePassword(
+
+                    credentialsId: 'github-token',
+
+                    gitToolName: 'Default'
+
+
+                )]) {
+
+
+
+                    sh """
+
+
+                    git push origin main
+
+
+                    """
+
+                }
+
+
+            }
+
+        }
+
+
+
+    }
+
+
+
+
+    post {
+
+
+
+        success {
+
+
+            echo """
+
+
+            ✅ CD SUCCESS
+
+
+            Image déployée :
+
+            ${IMAGE_NAME}:${IMAGE_TAG}
+
+
+            ArgoCD va synchroniser Kubernetes
+
+
+            """
+
+        }
+
+
+
+
+        failure {
+
+
+            echo """
+
+
+            ❌ CD FAILED
+
+
+            Aucun changement Kubernetes
+
+
+            """
+
+        }
+
+
+
+
+        always {
+
+
+            cleanWs()
+
+
+        }
+
+
+
+    }
+
+
+
+}
