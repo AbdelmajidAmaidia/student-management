@@ -38,35 +38,31 @@ pipeline {
 
         stage('Update Kubernetes Manifest') {
 
-
             steps {
 
                 sh """
 
                 echo "===================================="
-
                 echo "Updating Kubernetes image"
-
-                echo "New image: ${IMAGE_NAME}:${IMAGE_TAG}"
-
+                echo "Image: ${IMAGE_NAME}:${IMAGE_TAG}"
                 echo "===================================="
 
 
-
-                echo "Before modification:"
-
+                echo "Current image:"
                 grep image k8s/app/deployment.yaml || true
 
 
 
+                echo "Updating image tag..."
+
+
                 sed -i \
                 "s#image:.*#image: ${IMAGE_NAME}:${IMAGE_TAG}#" \
-                k8s/deployment.yaml
+                k8s/app/deployment.yaml
 
 
 
-                echo "After modification:"
-
+                echo "Updated image:"
                 grep image k8s/app/deployment.yaml || true
 
 
@@ -82,9 +78,7 @@ pipeline {
 
         stage('Commit Kubernetes Change') {
 
-
             steps {
-
 
                 sh """
 
@@ -98,8 +92,16 @@ pipeline {
 
 
 
-                git diff --cached --quiet || git commit \
-                -m "Deploy ${IMAGE_NAME}:${IMAGE_TAG}"
+                if git diff --cached --quiet; then
+
+                    echo "No Kubernetes change detected"
+
+                else
+
+                    git commit \
+                    -m "Deploy ${IMAGE_NAME}:${IMAGE_TAG}"
+
+                fi
 
 
                 """
@@ -113,7 +115,6 @@ pipeline {
 
 
         stage('Push Git Changes') {
-
 
             steps {
 
@@ -144,6 +145,7 @@ pipeline {
         }
 
 
+
     }
 
 
@@ -155,19 +157,20 @@ pipeline {
 
         success {
 
-
             echo """
 
             ====================================
 
             ✅ CD SUCCESS
 
-            Image updated:
+            Image deployed:
 
             ${IMAGE_NAME}:${IMAGE_TAG}
 
 
-            ArgoCD will synchronize Kubernetes
+            GitOps repository updated
+
+            ArgoCD will synchronize automatically
 
             ====================================
 
@@ -180,14 +183,14 @@ pipeline {
 
         failure {
 
-
             echo """
 
             ====================================
 
             ❌ CD FAILED
 
-            Kubernetes manifest not updated
+            Kubernetes manifest update failed
+
 
             ====================================
 
