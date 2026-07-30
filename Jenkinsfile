@@ -1,40 +1,66 @@
 pipeline {
 
-    agent any
+    agent {
+        label "wsl"
+    }
+
 
     tools {
+
         maven 'Maven3'
         jdk 'JDK17'
+
     }
+
 
     environment {
+
         IMAGE_NAME = 'amaidiaabdelmajiddo/student-management'
         IMAGE_TAG  = "${env.BUILD_NUMBER}"
-        NAMESPACE  = "student-test"
+
+        K8S_REPO   = 'https://github.com/AbdelmajidAmaidia/student-management-k8s.git'
+
     }
 
+
     options {
+
         timeout(time: 30, unit: 'MINUTES')
+
         timestamps()
+
         disableConcurrentBuilds()
+
         buildDiscarder(logRotator(numToKeepStr: '15'))
+
     }
+
 
 
     stages {
 
 
-        stage('Checkout') {
+        /*
+         * 1 - Récupération du code Spring Boot
+         */
+
+        stage('Checkout Application') {
 
             steps {
 
                 git branch: 'main',
+                    credentialsId: 'github-token',
                     url: 'https://github.com/AbdelmajidAmaidia/student-management.git'
 
             }
         }
 
 
+
+
+        /*
+         * 2 - Compilation + Tests
+         */
 
         stage('Build & Test') {
 
@@ -44,6 +70,7 @@ pipeline {
 
             }
 
+
             post {
 
                 always {
@@ -51,96 +78,89 @@ pipeline {
                     junit 'target/surefire-reports/*.xml'
 
                 }
+
             }
+
         }
 
 
 
-        stage('JaCoCo Code Coverage') {
+
+        /*
+         * 3 - Analyse SonarQube
+         */
+
+        stage('SonarQube Analysis') {
 
             steps {
 
-                echo 'JaCoCo report already generated during verify.'
+                withSonarQubeEnv('SonarQube') {
 
-            }
-        }
+                    sh '''
+                    mvn clean verify sonar:sonar
+                    '''
 
-
-
-        stage('SonarQube') {
-
-            steps {
-
-                script {
-
-
-                    if (env.CHANGE_ID) {
-
-
-                        echo "Pull Request détectée"
-
-                        sh "mvn clean test"
-
-
-
-                    } else if (env.BRANCH_NAME == "main") {
-
-
-                        echo "Merge effectué - Analyse complète"
-
-
-                        withSonarQubeEnv('SonarQube') {
-
-                            sh "mvn clean verify sonar:sonar"
-
-                        }
-                    }
                 }
+
             }
+
         }
 
 
 
-        stage('Deploy to Nexus Repository') {
+
+        /*
+         * 4 - Publication Nexus
+         */
+
+        stage('Deploy Artifact Nexus') {
 
             steps {
 
-                sh 'mvn deploy -DskipTests'
+                sh '''
+                mvn deploy -DskipTests
+                '''
 
             }
+
         }
 
 
 
-        stage('Publish Artifact') {
 
-            steps {
-
-                archiveArtifacts artifacts: 'target/*.jar',
-                                 fingerprint: true
-
-            }
-        }
-
-
+        /*
+         * 5 - Création image Docker
+         */
 
         stage('Build Docker Image') {
 
             steps {
 
+                sh """
 
-                sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+                docker build \
+                -t ${IMAGE_NAME}:${IMAGE_TAG} .
 
+                docker tag \
+                ${IMAGE_NAME}:${IMAGE_TAG} \
+                ${IMAGE_NAME}:latest
 
-                sh "docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest"
-
+                """
 
             }
+
         }
 
 
 
+
+
+        /*
+         * 6 - Push Docker Hub
+         */
+
         stage('Push Docker Image') {
+
 
             steps {
 
@@ -152,6 +172,7 @@ pipeline {
                     usernameVariable: 'DOCKER_USER',
 
                     passwordVariable: 'DOCKER_PASS'
+
 
                 )]) {
 
@@ -174,62 +195,132 @@ pipeline {
                     '''
 
                 }
+
             }
+
         }
 
 
 
 
 
-        stage('Deploy to Kubernetes') {
+        /*
+         * 7 - Mise à jour du repo Kubernetes
+         */
+
+        stage('Update Kubernetes Manifest') {
 
 
             steps {
 
 
-                input message: "Déployer la version ${IMAGE_TAG} ?",
-                      ok: 'Déployer'
+                dir('k8s-repo') {
+
+
+                    git branch: 'main',
+
+                        credentialsId: 'github-token',
+
+                        url: "${K8S_REPO}"
 
 
 
-                withKubeConfig([credentialsId: 'kubeconfig-prod']) {
+                    sh """
 
 
-                    sh "./scripts/deploy.sh ${IMAGE_TAG}"
+                    echo "Avant modification :"
+
+                    grep image k8s/deployment.yaml
+
+
+
+                    sed -i \
+                    's#image:.*#image: ${IMAGE_NAME}:${IMAGE_TAG}#' \
+                    k8s/deployment.yaml
+
+
+
+                    echo "Après modification :"
+
+                    grep image k8s/deployment.yaml
+
+
+
+                    """
 
 
                 }
 
             }
+
         }
 
 
 
 
-        stage('Verify Kubernetes Deployment') {
+
+        /*
+         * 8 - Commit + Push vers GitOps repo
+         */
+
+        stage('Push GitOps Change') {
 
 
             steps {
 
 
-                withKubeConfig([credentialsId: 'kubeconfig-prod']) {
+                dir('k8s-repo') {
 
 
-                    sh '''
-
-                    kubectl rollout status deployment/student-management \
-                    -n ${NAMESPACE}
+                    sh """
 
 
-                    kubectl get pods -n ${NAMESPACE}
+                    git config user.name "Jenkins"
 
-                    '''
+                    git config user.email "jenkins@company.com"
+
+
+
+                    git add k8s/deployment.yaml
+
+
+
+                    git commit \
+                    -m "Update image version ${IMAGE_TAG}" || true
+
+
+
+                    """
+
+
+
+                    withCredentials([gitUsernamePassword(
+
+                        credentialsId: 'github-token',
+
+                        gitToolName: 'Default'
+
+
+                    )]) {
+
+
+                        sh """
+
+                        git push origin main
+
+                        """
+
+                    }
+
 
                 }
 
+
             }
 
+
         }
+
 
 
     }
@@ -237,16 +328,13 @@ pipeline {
 
 
 
-
     post {
-
 
 
         always {
 
 
-            publishHTML(target: [
-
+            publishHTML([
 
                 allowMissing: true,
 
@@ -260,16 +348,19 @@ pipeline {
 
                 reportName: 'JaCoCo Report'
 
-
             ])
 
 
 
-            archiveArtifacts artifacts: 'target/jacoco.exec',
+            archiveArtifacts(
 
-                              allowEmptyArchive: true,
+                artifacts: 'target/*.jar',
 
-                              fingerprint: true
+                allowEmptyArchive: true,
+
+                fingerprint: true
+
+            )
 
 
 
@@ -279,77 +370,39 @@ pipeline {
 
 
 
-
-
         success {
 
 
-            echo "✅ Pipeline SUCCESS — version ${IMAGE_TAG}"
+            echo """
 
+            ✅ Pipeline SUCCESS
+
+            Docker Image :
+            ${IMAGE_NAME}:${IMAGE_TAG}
+
+            Argo CD va synchroniser Kubernetes
+
+            """
 
         }
-
-
 
 
 
         failure {
 
 
-            echo '❌ Pipeline FAILED'
+            echo """
 
+            ❌ Pipeline FAILED
 
+            Aucun déploiement Kubernetes effectué
 
-            script {
-
-
-                if (env.BRANCH_NAME == 'main') {
-
-
-                    withKubeConfig([credentialsId: 'kubeconfig-prod']) {
-
-
-
-                        sh '''
-
-
-                        if kubectl get deployment student-management \
-                        -n ${NAMESPACE} >/dev/null 2>&1;
-
-
-                        then
-
-
-                            echo "Rollback vers version précédente..."
-
-
-
-                            kubectl rollout undo deployment/student-management \
-                            -n ${NAMESPACE}
-
-
-
-                        else
-
-
-                            echo "Déploiement introuvable"
-
-
-
-                        fi
-
-
-
-                        '''
-
-                    }
-
-                }
-
-            }
+            """
 
         }
 
+
     }
+
 
 }
