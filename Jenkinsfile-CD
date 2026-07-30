@@ -117,7 +117,7 @@ pipeline {
 
                     gitUsernamePassword(
 
-                        credentialsId: 'github-token',
+                        credentialsId: 'github-ssh-devops',
 
                         gitToolName: 'Default'
 
