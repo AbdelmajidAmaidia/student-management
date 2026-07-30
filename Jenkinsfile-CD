@@ -48,13 +48,14 @@ pipeline {
                 echo "===================================="
 
 
+
                 echo "Current image:"
+
                 grep image k8s/app/deployment.yaml || true
 
 
 
                 echo "Updating image tag..."
-
 
                 sed -i \
                 "s#image:.*#image: ${IMAGE_NAME}:${IMAGE_TAG}#" \
@@ -62,7 +63,8 @@ pipeline {
 
 
 
-                echo "Updated image:"
+                echo "New image:"
+
                 grep image k8s/app/deployment.yaml || true
 
 
@@ -92,16 +94,8 @@ pipeline {
 
 
 
-                if git diff --cached --quiet; then
-
-                    echo "No Kubernetes change detected"
-
-                else
-
-                    git commit \
-                    -m "Deploy ${IMAGE_NAME}:${IMAGE_TAG}"
-
-                fi
+                git diff --cached --quiet || git commit \
+                -m "Deploy ${IMAGE_NAME}:${IMAGE_TAG}"
 
 
                 """
@@ -134,7 +128,12 @@ pipeline {
 
                     sh """
 
-                    git push origin main
+                    echo "Pushing GitOps change to main branch"
+
+
+
+                    git push origin HEAD:main
+
 
                     """
 
@@ -143,7 +142,6 @@ pipeline {
             }
 
         }
-
 
 
     }
@@ -163,7 +161,8 @@ pipeline {
 
             ✅ CD SUCCESS
 
-            Image deployed:
+
+            Image updated:
 
             ${IMAGE_NAME}:${IMAGE_TAG}
 
@@ -171,6 +170,7 @@ pipeline {
             GitOps repository updated
 
             ArgoCD will synchronize automatically
+
 
             ====================================
 
@@ -189,7 +189,8 @@ pipeline {
 
             ❌ CD FAILED
 
-            Kubernetes manifest update failed
+
+            GitOps update failed
 
 
             ====================================
