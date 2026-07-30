@@ -55,7 +55,7 @@ pipeline {
 
                 echo "Before modification:"
 
-                grep image k8s/deployment.yaml || true
+                grep image k8s/app/deployment.yaml || true
 
 
 
@@ -67,7 +67,7 @@ pipeline {
 
                 echo "After modification:"
 
-                grep image k8s/deployment.yaml || true
+                grep image k8s/app/deployment.yaml || true
 
 
                 """
@@ -94,7 +94,7 @@ pipeline {
 
 
 
-                git add k8s/deployment.yaml
+                git add k8s/app/deployment.yaml
 
 
 
