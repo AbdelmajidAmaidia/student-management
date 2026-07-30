@@ -110,41 +110,25 @@ pipeline {
 
         stage('Push Git Changes') {
 
-            steps {
+    steps {
 
+        sshagent(credentials: ['github-ssh-devops']) {
 
-                withCredentials([
+            sh '''
 
-                    gitUsernamePassword(
+            echo "===================================="
+            echo "Pushing GitOps changes"
+            echo "===================================="
 
-                        credentialsId: 'github-ssh-devops',
+            git push origin HEAD:main
 
-                        gitToolName: 'Default'
-
-                    )
-
-                ]) {
-
-
-                    sh """
-
-                    echo "Pushing GitOps change to main branch"
-
-
-
-                    git push origin HEAD:main
-
-
-                    """
-
-                }
-
-            }
+            '''
 
         }
 
-
     }
+
+}
 
 
 
