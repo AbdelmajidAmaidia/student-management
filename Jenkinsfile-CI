@@ -71,23 +71,26 @@ pipeline {
         }
 
 
+stage('SonarQube Analysis') {
 
-        stage('SonarQube Analysis') {
+    steps {
 
-            steps {
+        withSonarQubeEnv('SonarQube') {
 
-                withSonarQubeEnv('SonarQube') {
+            withCredentials([string(credentialsId: 'jenkins-tokenn', variable: 'SONAR_TOKEN')]) {
 
-                    sh '''
-                    mvn sonar:sonar
-                    '''
-
-                }
+                sh '''
+                mvn sonar:sonar \
+                -Dsonar.login=$SONAR_TOKEN
+                '''
 
             }
 
         }
 
+    }
+
+}
 
 
 
