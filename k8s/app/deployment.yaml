@@ -21,7 +21,7 @@ spec:
       containers:
       - name: student-management
 
-        image: amaidiaabdelmajiddo/student-management:2
+        image: amaidiaabdelmajiddo/student-management:3
 
         imagePullPolicy: Always
 
