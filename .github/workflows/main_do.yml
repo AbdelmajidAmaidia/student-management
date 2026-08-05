@@ -6,6 +6,7 @@ on:
       - main
   workflow_dispatch:
 
+
 jobs:
 
   build:
@@ -19,9 +20,11 @@ jobs:
 
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
 
-      - name: Set up Java
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
@@ -34,16 +37,21 @@ jobs:
           mvn clean package -DskipTests
 
 
-      - name: Verify generated jar
+      - name: Verify generated JAR
         run: |
+          echo "Generated files:"
           ls -lh target/
 
+          echo "Checking executable jar..."
+          test -f target/*.jar
 
-      - name: Upload jar artifact
+
+      - name: Upload JAR artifact
         uses: actions/upload-artifact@v4
         with:
           name: java-app
           path: target/*.jar
+          retention-days: 1
 
 
 
@@ -61,18 +69,19 @@ jobs:
     steps:
 
 
-      - name: Download jar artifact
+      - name: Download JAR artifact
         uses: actions/download-artifact@v4
         with:
           name: java-app
 
 
-      - name: Verify downloaded jar
+      - name: Verify downloaded JAR
         run: |
+          echo "Artifact content:"
           ls -lh
 
 
-      - name: Login Azure
+      - name: Login to Azure
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_1D6D9A1259DB4F2FB96A9EA859E0D75E }}
@@ -80,9 +89,9 @@ jobs:
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_491997D3E65842C7A3B552FEA7B8BA91 }}
 
 
-      - name: Deploy JAR to Azure
+      - name: Deploy JAR to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
           app-name: 'do'
-          slot-name: Production
+          slot-name: 'Production'
           package: '*.jar'
